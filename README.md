@@ -2,7 +2,7 @@
 
 Create an empty `full-stack-ml-metaflow-corise-week-2` repository in your GitHub account. 
 
-From [your week 1 workspace](https://account.outerbounds.dev/account/?workspace=/home/workspace/workspaces/full-stack-ml-metaflow-corise-week-1/workspace.code-workspace):
+From [your week 1 workspace](https://account.outerbounds.dev/account/?workspace=/home/workspace/workspaces/full-stack-ml-metaflow-corise-week-1/workspace.code-workspace):  
 
 If you are ok with giving VSCode access to the GitHub account:
 ```bash
