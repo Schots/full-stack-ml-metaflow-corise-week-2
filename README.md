@@ -14,4 +14,4 @@ If you are [using a Personal Access Token (PAT)](https://app.arcade.software/sha
 python /home/workspace/scripts/corise/get_new_corise_content.py <YOUR GITHUB ACCOUNT NAME> --week 2 –-gh-pat <PAT>
 ```
 
-Access your workspaces [here](https://account.outerbounds.dev/account/?workspace=/home/workspace/workspaces/full-stack-ml-metaflow-corise-week-2/workspace.code-workspace).
+Access your workspaces [here](https://account.outerbounds.dev/account/?workspace=/home/workspace/workspaces/full-stack-ml-metaflow-corise-week-2/workspace.code-workspace).  
