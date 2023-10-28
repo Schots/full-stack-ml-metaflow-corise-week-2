@@ -53,10 +53,10 @@ class ParallelFlow(FlowSpec):
         from sklearn.metrics import accuracy_score, roc_auc_score
 
         # Train and score the baseline model
-        dummy_model = DummyClassifier(strategy="most_frequent")
-        dummy_model.fit(self.traindf["review"],self.traindf["label"])
-        self.probas = dummy_model.predict_proba(self.valdf["review"])[:,1]
-        self.preds = dummy_model.predict(self.valdf["review"])
+        self.dummy_model = DummyClassifier(strategy="most_frequent")
+        self.dummy_model.fit(self.traindf["review"],self.traindf["label"])
+        self.probas = self.dummy_model.predict_proba(self.valdf["review"])[:,1]
+        self.preds = self.dummy_model.predict(self.valdf["review"])
         self.base_acc = accuracy_score(self.valdf["label"],self.preds)
         self.base_rocauc = roc_auc_score(self.valdf["label"],self.probas)
 
@@ -76,10 +76,10 @@ class ParallelFlow(FlowSpec):
         estimator = LogisticRegression(max_iter=1_000)
 
         #Model
-        lr_model = make_pipeline(vectorizer,estimator)
-        lr_model.fit(self.traindf['review'], self.traindf['label'])
-        self.preds = lr_model.predict(self.valdf['review'])
-        self.probas = lr_model.predict_proba(self.valdf['review'])[:,1]
+        self.lr_model = make_pipeline(vectorizer,estimator)
+        self.lr_model.fit(self.traindf['review'], self.traindf['label'])
+        self.preds = self.lr_model.predict(self.valdf['review'])
+        self.probas = self.lr_model.predict_proba(self.valdf['review'])[:,1]
         
         # Metrics
         self.lr_acc = accuracy_score(self.valdf['label'], self.preds)
