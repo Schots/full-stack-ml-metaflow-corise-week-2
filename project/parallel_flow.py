@@ -100,7 +100,12 @@ class ParallelFlow(FlowSpec):
     @card(type="corise")
     @step
     def end(self):
-        print(self.tfidf_lr_rocauc)
+        if self.tfidf_lr_rocauc > self.base_rocauc:
+            margin = self.tfidf_lr_rocauc - self.base_rocauc
+            print(f"The model beats the baseline by {margin:0.2f}")
+            print(f"Model ROC_AUC:{self.tfidf_lr_rocauc:0.2f}")
+        else:
+            print("The model is worse than the baseline.")
 
 if __name__ == "__main__":
     ParallelFlow()
