@@ -76,25 +76,31 @@ class ParallelFlow(FlowSpec):
         estimator = LogisticRegression(max_iter=1_000)
 
         #Model
-        self.lr_model = make_pipeline(vectorizer,estimator)
-        self.lr_model.fit(self.traindf['review'], self.traindf['label'])
-        self.preds = self.lr_model.predict(self.valdf['review'])
-        self.probas = self.lr_model.predict_proba(self.valdf['review'])[:,1]
+        self.tfidf_lr_model = make_pipeline(vectorizer,estimator)
+        self.tfidf_lr_model.fit(self.traindf['review'], self.traindf['label'])
+        self.preds = self.tfidf_lr_model.predict(self.valdf['review'])
+        self.probas = self.tfidf_lr_model.predict_proba(self.valdf['review'])[:,1]
         
         # Metrics
-        self.lr_acc = accuracy_score(self.valdf['label'], self.preds)
-        self.lr_rocauc = roc_auc_score(self.valdf['label'], self.probas)
+        self.tfidf_lr_acc = accuracy_score(self.valdf['label'], self.preds)
+        self.tfidf_lr_rocauc = roc_auc_score(self.valdf['label'], self.probas)
         
         self.next(self.join)
     
     @step
     def join(self,inputs):
+        # Collect Baseline roc_auc
+        self.base_rocauc = inputs.baseline.base_rocauc
+
+        # Collect tfidf_lr model roc_auc
+        self.tfidf_lr_rocauc = inputs.tfidf_lr.tfidf_lr_rocauc
+
         self.next(self.end)
 
     @card(type="corise")
     @step
     def end(self):
-        pass
+        print(self.tfidf_lr_rocauc)
 
 if __name__ == "__main__":
     ParallelFlow()
