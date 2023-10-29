@@ -7,6 +7,7 @@ from metaflow import (
     current
 )
 from metaflow.cards import Table, Markdown, Artifact
+import numpy as np
 
 def labeling_function(row):
     """
@@ -22,7 +23,7 @@ def labeling_function(row):
 
 class ParallelFlow(FlowSpec):
     split_size = Parameter("split-sz", default=0.2)
-    seed = Parameter("random_seed",default=42)
+    seed = Parameter("random_seed", default=42)
     data = IncludeFile("data", default="../data/Womens Clothing E-Commerce Reviews.csv")
 
     @step
@@ -45,7 +46,7 @@ class ParallelFlow(FlowSpec):
         self.traindf, self.valdf = train_test_split(_df, 
                                                      test_size=self.split_size,
                                                      random_state=self.seed)
-        self.next(self.baseline,self.tfidf_lr)
+        self.next(self.baseline, self.make_grid)
 
     @step
     def baseline(self):
@@ -54,56 +55,74 @@ class ParallelFlow(FlowSpec):
 
         # Train and score the baseline model
         self.dummy_model = DummyClassifier(strategy="most_frequent")
-        self.dummy_model.fit(self.traindf["review"],self.traindf["label"])
-        self.probas = self.dummy_model.predict_proba(self.valdf["review"])[:,1]
+        self.dummy_model.fit(self.traindf["review"], self.traindf["label"])
+        self.probas = self.dummy_model.predict_proba(self.valdf["review"])[:, 1]
         self.preds = self.dummy_model.predict(self.valdf["review"])
-        self.base_acc = accuracy_score(self.valdf["label"],self.preds)
-        self.base_rocauc = roc_auc_score(self.valdf["label"],self.probas)
+        self.base_acc = accuracy_score(self.valdf["label"], self.preds)
+        self.base_rocauc = roc_auc_score(self.valdf["label"], self.probas)
 
-        self.next(self.join)
-    
+        self.next(self.final_join)
+
     @step
-    def tfidf_lr(self):
+    def make_grid(self):
+        from sklearn.model_selection import ParameterGrid
+
+        param_values = {'tfidfvectorizer__ngram_range': [(1, 1), (1, 2), (1, 3)]}
+        self.grid_points = list(ParameterGrid(param_values))
+
+        # evaluate each in cross product of ParameterGrid.
+        self.next(self.tfidf_lr_text_model, 
+                  foreach='grid_points')
+
+    @step
+    def tfidf_lr_text_model(self):
         from sklearn.feature_extraction.text import TfidfVectorizer
         from sklearn.linear_model import LogisticRegression
         from sklearn.metrics import accuracy_score, roc_auc_score
         from sklearn.pipeline import make_pipeline
-
-        # Tokenization
-        vectorizer = TfidfVectorizer(ngram_range=(1,2))
+        from sklearn.model_selection import cross_val_score
         
-        #Estimator
+        # Tokenization
+        vectorizer = TfidfVectorizer()
+        
+        # Estimator
         estimator = LogisticRegression(max_iter=1_000)
 
-        #Model
-        self.tfidf_lr_model = make_pipeline(vectorizer,estimator)
-        self.tfidf_lr_model.fit(self.traindf['review'], self.traindf['label'])
-        self.preds = self.tfidf_lr_model.predict(self.valdf['review'])
-        self.probas = self.tfidf_lr_model.predict_proba(self.valdf['review'])[:,1]
-        
-        # Metrics
-        self.tfidf_lr_acc = accuracy_score(self.valdf['label'], self.preds)
-        self.tfidf_lr_rocauc = roc_auc_score(self.valdf['label'], self.probas)
-        
-        self.next(self.join)
-    
-    @step
-    def join(self,inputs):
-        # Collect Baseline roc_auc
-        self.base_rocauc = inputs.baseline.base_rocauc
+        # Model
+        self.lr_text_model = make_pipeline(vectorizer, estimator)
 
-        # Collect tfidf_lr model roc_auc
-        self.tfidf_lr_rocauc = inputs.tfidf_lr.tfidf_lr_rocauc
+        # Score via 5-fold Cross-Validation
+        self.model_scores = cross_val_score(self.lr_text_model,
+                                            self.traindf["review"],
+                                            self.traindf["label"],
+                                            scoring="roc_auc",
+                                            cv=5)
+        
+        self.lr_text_roc_auc = np.mean(self.model_scores)
+
+        self.next(self.tfidf_join)
+
+    @step
+    def tfidf_join(self, inputs):
+        # Gather results from each tfidf_lr_text_model branch.
+        self.avg_lr_text_rocauc = np.mean([inp.lr_text_roc_auc for inp in inputs])
+
+        self.next(self.final_join)
+
+    @step
+    def final_join(self, inputs):
+        self.base_rocauc = inputs.baseline.base_rocauc
+        self.lr_text_rocauc = inputs.tfidf_join.avg_lr_text_rocauc
 
         self.next(self.end)
 
     @card(type="corise")
     @step
     def end(self):
-        if self.tfidf_lr_rocauc > self.base_rocauc:
-            margin = self.tfidf_lr_rocauc - self.base_rocauc
+        if self.lr_text_rocauc > self.base_rocauc:
+            margin = self.lr_text_rocauc - self.base_rocauc
             print(f"The model beats the baseline by {margin:0.2f}")
-            print(f"Model ROC_AUC:{self.tfidf_lr_rocauc:0.2f}")
+            print(f"Model ROC_AUC: {self.lr_text_rocauc:0.2f}")
         else:
             print("The model is worse than the baseline.")
 
