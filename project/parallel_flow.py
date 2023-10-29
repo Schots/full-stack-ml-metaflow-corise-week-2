@@ -104,10 +104,11 @@ class ParallelFlow(FlowSpec):
         self.lr_text_roc_auc = np.mean(self.model_scores)
         self.lr_text_model.fit(self.traindf["review"], self.traindf["label"])
 
-        # Storing the model, parameters, and score
+        # Storing the model, parameters, oof data and score
         self.current_grid_point = current_grid_point
         self.current_model = self.lr_text_model
         self.current_score = self.lr_text_roc_auc
+        self.oof_data = self.valdf
 
 
         self.next(self.tfidf_join)
@@ -115,6 +116,7 @@ class ParallelFlow(FlowSpec):
 
     @step
     def tfidf_join(self, inputs):
+
         # Gather results from each tfidf_lr_text_model branch.
         self.lr_text_rocauc = np.max([inp.lr_text_roc_auc for inp in inputs])
 
@@ -125,6 +127,7 @@ class ParallelFlow(FlowSpec):
         self.best_model = best_input.current_model
         self.best_parameters = best_input.current_grid_point
         
+        self.oof_data = inputs.tfidf_lr_text_model.oof_data
         self.next(self.final_join)
 
 
@@ -134,6 +137,7 @@ class ParallelFlow(FlowSpec):
         self.lr_text_rocauc = inputs.tfidf_join.lr_text_rocauc
         self.best_model = inputs.tfidf_join.best_model
         self.best_model_parameters = inputs.tfidf_join.best_parameters
+        self.oof_data = inputs.tfidf_join.oof_data
         
         self.next(self.end)
 
@@ -141,6 +145,7 @@ class ParallelFlow(FlowSpec):
     @step
     def end(self):
         from metaflow import Flow, current
+        from sklearn.metrics import roc_auc_score
 
         # Is the model better than a baseline?
         self.beats_baseline = self.lr_text_rocauc > self.base_rocauc
@@ -165,6 +170,11 @@ class ParallelFlow(FlowSpec):
             run.add_tag('Deployment_candidate')
         else:
             print("Review this model. Have not passed the minimal tests.")
+        
+        # Out of fold rocauc
+        oof_preds = self.best_model.predict_proba(self.oof_data["review"])[:,1]
+        self.oof_rocauc = roc_auc_score(self.oof_data["label"],oof_preds)
+        print(f"Out of Fold Model ROC_AUC:{self.oof_rocauc:0.2f}") 
 
 if __name__ == "__main__":
     ParallelFlow()
