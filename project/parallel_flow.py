@@ -81,10 +81,13 @@ class ParallelFlow(FlowSpec):
         from sklearn.metrics import accuracy_score, roc_auc_score
         from sklearn.pipeline import make_pipeline
         from sklearn.model_selection import cross_val_score
-        
-        # Tokenization
-        vectorizer = TfidfVectorizer()
-        
+
+        # Get the current grid point
+        current_grid_point = self.input
+
+        # Tokenization using the ngram_range from the current grid point
+        vectorizer = TfidfVectorizer(ngram_range=current_grid_point['tfidfvectorizer__ngram_range'])
+
         # Estimator
         estimator = LogisticRegression(max_iter=1_000)
 
@@ -97,10 +100,11 @@ class ParallelFlow(FlowSpec):
                                             self.traindf["label"],
                                             scoring="roc_auc",
                                             cv=5)
-        
+
         self.lr_text_roc_auc = np.mean(self.model_scores)
 
         self.next(self.tfidf_join)
+
 
     @step
     def tfidf_join(self, inputs):
