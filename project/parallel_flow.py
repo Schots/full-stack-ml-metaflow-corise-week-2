@@ -102,6 +102,13 @@ class ParallelFlow(FlowSpec):
                                             cv=5)
 
         self.lr_text_roc_auc = np.mean(self.model_scores)
+        self.lr_text_model.fit(self.traindf["review"], self.traindf["label"])
+
+        # Storing the model, parameters, and score
+        self.current_grid_point = current_grid_point
+        self.current_model = self.lr_text_model
+        self.current_score = self.lr_text_roc_auc
+
 
         self.next(self.tfidf_join)
 
@@ -109,26 +116,55 @@ class ParallelFlow(FlowSpec):
     @step
     def tfidf_join(self, inputs):
         # Gather results from each tfidf_lr_text_model branch.
-        self.avg_lr_text_rocauc = np.mean([inp.lr_text_roc_auc for inp in inputs])
+        self.lr_text_rocauc = np.max([inp.lr_text_roc_auc for inp in inputs])
 
+        # Find the output with the highest score from the parallel branches
+        best_input = max(inputs, key=lambda inp: inp.current_score)
+        
+        # Retrieve and store the best model, its parameters, and its score
+        self.best_model = best_input.current_model
+        self.best_parameters = best_input.current_grid_point
+        
         self.next(self.final_join)
+
 
     @step
     def final_join(self, inputs):
         self.base_rocauc = inputs.baseline.base_rocauc
-        self.lr_text_rocauc = inputs.tfidf_join.avg_lr_text_rocauc
-
+        self.lr_text_rocauc = inputs.tfidf_join.lr_text_rocauc
+        self.best_model = inputs.tfidf_join.best_model
+        self.best_model_parameters = inputs.tfidf_join.best_parameters
+        
         self.next(self.end)
 
     @card(type="corise")
     @step
     def end(self):
-        if self.lr_text_rocauc > self.base_rocauc:
+        from metaflow import Flow, current
+
+        # Is the model better than a baseline?
+        self.beats_baseline = self.lr_text_rocauc > self.base_rocauc
+
+        # Smoke testing
+        _smoke_test_reviews = ["Hate it. Horrible shoes",
+                               "Beautiful shoes. Loved it",
+                              ]
+
+        _smoke_test_preds = self.best_model.predict_proba(_smoke_test_reviews)[:,1]
+        print(_smoke_test_preds) 
+        negative_review = _smoke_test_preds[0] 
+        positive_review = _smoke_test_preds[1] 
+        self.passed_smoke_test = positive_review > negative_review
+
+        if self.beats_baseline and self.passed_smoke_test:
             margin = self.lr_text_rocauc - self.base_rocauc
+            print("Model passed the smoke test")
             print(f"The model beats the baseline by {margin:0.2f}")
-            print(f"Model ROC_AUC: {self.lr_text_rocauc:0.2f}")
+            print(f"Model 5-fold CV ROC_AUC: {self.lr_text_rocauc:0.2f}")
+            run = Flow(current.flow_name)[current.run_id]
+            run.add_tag('Deployment_candidate')
         else:
-            print("The model is worse than the baseline.")
+            print("Review this model. Have not passed the minimal tests.")
 
 if __name__ == "__main__":
     ParallelFlow()
